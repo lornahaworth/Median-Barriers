@@ -49,7 +49,7 @@ D2.random <- subset(District2.random, select=c(cid,
                                                MedianWidth, 
                                                RoadsideBarrier))
 
-D2.random <- mutate(animal==0) #need to add column to random points to show no roadkill
+D2.random <- mutate(animal=0) #HELP need to add column to random points to show no roadkill
 ```
 
 
