@@ -1,0 +1,84 @@
+---
+title: "Practice with datasets"
+author: Lorna Haworth
+output: html_notebook
+---
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+First, set working directory and load appropriate libraries.
+
+BRAINSTORMING NOTES
+data frame has response variable (roadkill) and possible predictors (NCLD, NHD, building)
+no empty values in rows
+
+what is the median type telling you in a random points? how to include random 
+ --> are they correlated
+
+how to make a model with only presence data (no absence)
+
+```{r load libraries} 
+#knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
+getwd()
+
+library(tidyverse)
+library(conflicted)
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("summarize", "dplyr")
+?group_by
+```
+
+```{r read in data}
+District2.squirrels <- read.csv("D2_squirrel_hits.csv")
+District2.random <- read.csv("D2_random_sites.csv")
+```
+
+
+Make the data frames look beter by only using necessary data
+```{r make new data frames with simplified information from csv }
+D2.squirrel.road <- subset(District2.squirrels, select=c(nid,
+                                                         animal, 
+                                                          condition, 
+                                                          created_da, 
+                                                          MedianType, 
+                                                          SecondaryAttribute, 
+                                                          MedianWidth, 
+                                                          RoadsideBarrier))
+D2.random <- subset(District2.random, select=c(cid,
+                                               MedianType,
+                                               SecondaryAttribute, 
+                                               MedianWidth, 
+                                               RoadsideBarrier))
+
+#D2.random <- mutate(animal=0) #HELP need to add column to random points to show no roadkill
+
+# Can do this two ways:
+D2.random <- D2.random %>% #With dplyr pipes %>%
+  mutate(animal=0)
+
+D2.random$animal <- 0 # OR with base R
+
+# But my suggestion would be to create a new column ("roadkill") in both the random and squirrel dataframes to act as a binary indicator
+D2.squirrel.road$roadkill <- 1
+D2.random$roadkill <- 0
+```
+
+
+TO DO: make table that shows totals for number of roadkill for every median type compared against if it was a roadkill point or simulated point
+```{r organize data}
+#collapse(num.RK ~ MedianType )
+#make combined data frame called "D2.squirrel.com"
+
+
+  
+```
+
+TO DO
+```{r glm model}
+# m1.D2.squirrel <-glm(num.RK ~ MedianType,
+#                      data = D2.squirrel.com,
+#                      family = poisson(link = "log"))
+
+```
+
+
+
