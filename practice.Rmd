@@ -1,7 +1,7 @@
 ---
 title: "Practice with datasets"
 author: Lorna Haworth
-output: html_notebook
+output: 
 ---
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 First, set working directory and load appropriate libraries.
