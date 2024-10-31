@@ -1,5 +1,5 @@
 ---
-title: "Practice with datasets"
+title: "Practice model"
 author: Lorna Haworth
 output: 
 ---
@@ -21,12 +21,12 @@ getwd()
 
 library(tidyverse)
 library(conflicted)
-library(glmmTMB)
-library(DHARMa)
+library(glmmTMB) #to run simulation
+library(DHARMa) #to run simulation
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 conflict_prefer("summarize", "dplyr")
-?group_by
+
 ```
 
 ```{r read in data}
@@ -51,20 +51,31 @@ D2_random <- subset(District2_random, select=c(#cid,
                                               # MedianWidth, 
                                               # RoadsideBarrier))
 
-#D2.random <- mutate(as.factor[animal="random"]) #HELP need to add column to random points to show no roadkill
+
 D2_random$animal<-"random" 
 D2_random$condition <- "none"
 ```
 
+separate median types:
+library(stringr)
+deer_comb <- deer_comb %>%
+  as.data.frame() %>%
+  mutate(MedianType = case_when(
+    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
+    str_detect(MedianType, "concrete") ~ "concrete", 
+    str_detect(MedianType, "cable") ~ "cable",
+    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
+    TRUE ~ MedianType # Keep other values as they are
+  ))
 
-TO DO: make table that shows totals for number of roadkill for every median type compared against if it was a roadkill point or simulated point
+
 ```{r organize data}
 #collapse(num.RK ~ MedianType )
 #make combined data frame called "D2.squirrel.com"
 
-point_median_ug <- rbind(D2_random, D2_squirrel_road)
+point_median_ug <- rbind(D2_random, D2_squirrel_road) #use binomial model
 
-point_median <- point_median_ug %>% 
+point_median <- point_median_ug %>%  #use poisson
   group_by(MedianType, condition) %>%
   summarize(count=n(), .groups = "drop")
 
@@ -72,7 +83,7 @@ point_median <- point_median_ug %>%
 
 ```
 
-TO DO
+TO DO make binomial model with same predictors 
 ```{r glm model}
 m1_D2_squirrel <-glm(count ~ MedianType + condition,
                      data = point_median,
@@ -80,7 +91,7 @@ m1_D2_squirrel <-glm(count ~ MedianType + condition,
 summary(m1_D2_squirrel)
 
 ```
-```{r,}
+```{r test model against simulated points}
 simulation_output <- simulateResiduals(fittedModel = m1_D2_squirrel)
 plot(simulation_output)
 testUniformity(simulation_output)
