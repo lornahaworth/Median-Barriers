@@ -4,16 +4,10 @@ author: Lorna Haworth
 output: 
 ---
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-First, set working directory and load appropriate libraries.
 
 BRAINSTORMING NOTES
-data frame has response variable (roadkill) and possible predictors (NCLD, NHD, building)
-no empty values in rows
-
-what is the median type telling you in a random points? how to include random 
- --> are they correlated
-
-how to make a model with only presence data (no absence)
+-data frame has response variable (roadkill) and possible predictors (NCLD, NHD, building)
+-no empty values in rows
 
 ```{r load libraries} 
 knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
