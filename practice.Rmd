@@ -9,6 +9,10 @@ BRAINSTORMING NOTES
 -data frame has response variable (roadkill) and possible predictors (NCLD, NHD, building)
 -no empty values in rows
 
+deer first, then animals in order of size (large-small)
+maybe mtn lion next
+sin wave on residual chart ?? why that shape
+
 ```{r load libraries} 
 knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
 getwd()
@@ -17,6 +21,8 @@ library(tidyverse)
 library(conflicted)
 library(glmmTMB) #to run simulation
 library(DHARMa) #to run simulation
+library(stringr)
+
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 conflict_prefer("summarize", "dplyr")
@@ -50,21 +56,11 @@ D2_random$animal<-"random"
 D2_random$condition <- "none"
 ```
 
-separate median types:
-library(stringr)
-deer_comb <- deer_comb %>%
-  as.data.frame() %>%
-  mutate(MedianType = case_when(
-    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
-    str_detect(MedianType, "concrete") ~ "concrete", 
-    str_detect(MedianType, "cable") ~ "cable",
-    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
-    TRUE ~ MedianType # Keep other values as they are
-  ))
+
 
 
 ```{r organize data}
-#collapse(num.RK ~ MedianType )
+
 #make combined data frame called "D2.squirrel.com"
 
 point_median_ug <- rbind(D2_random, D2_squirrel_road) #use binomial model
@@ -74,21 +70,58 @@ point_median <- point_median_ug %>%  #use poisson
   summarize(count=n(), .groups = "drop")
 
 
+#keep only one median type in structure column, new dataframe with single classes
+point_median2 <- point_median %>%
+  as.data.frame() %>%
+  mutate(MedianType = case_when(
+    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
+    str_detect(MedianType, "concrete") ~ "concrete",
+    str_detect(MedianType, "cable") ~ "cable",
+    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
+    TRUE ~ MedianType # Keep other values as they are
+  ))
+
+#create binary indicator for structures, add opaque (thrie + concrete) vs not (cable)
+df$structure <- 0 # Create structure column and assign it a default value of 0
+df <- df %>%
+  mutate(structure = case_when(
+    str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
+    str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
+    str_detect(MedianType, "cable") ~ 1, # If MedianType contains "cable", change structure to 1
+    TRUE ~ structure # Keep other values as they are
+  ))
 
 ```
 
 TO DO make binomial model with same predictors 
 ```{r glm model}
+#poisson family
 m1_D2_squirrel <-glm(count ~ MedianType + condition,
                      data = point_median,
                      family = poisson(link = "log"))
 summary(m1_D2_squirrel)
 
+#binomial family
+m2_D2_squirrel <-glm(count ~ MedianType + condition,
+                     data = point_median,
+                     family = binomial(link = "logit"))
+summary(m2_D2_squirrel)
+
 ```
+
+
+
 ```{r test model against simulated points}
+#with model 1 (Poisson)
 simulation_output <- simulateResiduals(fittedModel = m1_D2_squirrel)
 plot(simulation_output)
 testUniformity(simulation_output)
+
+#with model 2 (binomial)
+simulation_output2 <- simulateResiduals(fittedModel = m2_D2_squirrel)
+plot(simulation_output2)
+testUniformity(simulation_output2)
+
 
 ```
 
