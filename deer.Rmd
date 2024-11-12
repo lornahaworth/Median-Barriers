@@ -1,0 +1,184 @@
+---
+title: "Practicing the model deer"
+author: Lorna Haworth
+output: 
+---
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+BRAINSTORMING NOTES
+-data frame has response variable (roadkill) and possible predictors (NCLD, NHD, building)
+-no empty values in rows
+
+deer first, then animals in order of size (large-small)
+maybe mtn lion next
+sin wave on residual chart ?? why that shape
+
+```{r load libraries} 
+knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
+getwd()
+
+library(tidyverse)
+library(conflicted)
+library(lmtest)     # for lrtest()
+library(bbmle)      # for ICtab()
+library(glmmTMB)    #to run simulation
+library(DHARMa)     #to run simulation
+library(stringr)
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("summarize", "dplyr")
+
+```
+
+```{r read in data}
+
+#District 2 random points
+D2_random_sites <- read.csv("d2_random_sites_HPMS.csv")
+
+#District 2 mule deer
+D2_deer_hits <- read.csv("d2_deer_hits_HPMS.csv")
+
+```
+
+
+Make the data frames look better by only using necessary data
+```{r make new data frames with simplified information from csv }
+
+D2_random <- subset(D2_random_sites, select=c(#cid,
+                                               MedianType,
+                                               LANE_WIDTH,
+                                               MEDIAN_TYP,
+                                               MEDIAN_WID))
+                                              # SecondaryAttribute, 
+                                              # MedianWidth, 
+                                              # RoadsideBarrier))
+
+D2_deer <- subset(D2_deer_hits, select = c(animal, 
+                                           condition, 
+                                           MedianType,
+                                           LANE_WIDTH,
+                                           MEDIAN_TYP,
+                                           MEDIAN_WID))
+
+#add columns to random points dataframe for to distinguish random and animal condition
+D2_random$animal<-"random" 
+D2_random$condition <- "none"
+```
+LORNA START HERE
+
+```{r organize and group data}
+
+#make combined data frame 
+
+#squirrels
+point_median_ug <- rbind(D2_random, D2_squirrel) #use in binomial model
+
+point_median_sq <- point_median_ug %>%  #use in poisson
+  group_by(MedianType, condition) %>%
+  summarize(count=n(), .groups = "drop")
+
+#keep only one median type in structure column, new data frame with single classes
+point_median_sq2 <- point_median_sq %>%
+  as.data.frame() %>%
+  mutate(MedianType = case_when(
+    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
+    str_detect(MedianType, "concrete") ~ "concrete",
+    str_detect(MedianType, "cable") ~ "cable",
+    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
+    TRUE ~ MedianType # Keep other values as they are
+  ))
+
+#create binary indicator for structures, add opaque (thrie + concrete) vs not (cable)
+point_median_sq2$structure <- 0 # Create structure column and assign it a default value of 0
+point_median_sq2 <- point_median_sq2 %>%
+  mutate(structure = case_when(
+    str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
+    str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
+    str_detect(MedianType, "cable") ~ 1, # If MedianType contains "cable", change structure to 1
+    TRUE ~ structure # Keep other values as they are
+  ))
+
+
+#deer
+deer_median_ug <- rbind(D2_random, D2_deer)
+
+deer_median <- deer_median_ug %>%  
+  group_by(MedianType, condition) %>%
+  summarize(count=n(), .groups = "drop")
+
+deer_median_2 <- deer_median %>%
+  as.data.frame() %>%
+  mutate(MedianType = case_when(
+    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
+    str_detect(MedianType, "concrete") ~ "concrete",
+    str_detect(MedianType, "cable") ~ "cable",
+    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
+    TRUE ~ MedianType # Keep other values as they are
+  ))
+
+deer_median_2$structure <- 0 # Create structure column and assign it a default value of 0
+deer_median_2 <- deer_median_2 %>%
+  mutate(structure = case_when(
+    str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
+    str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
+    str_detect(MedianType, "cable") ~ 1, # If MedianType contains "cable", change structure to 1
+    TRUE ~ structure # Keep other values as they are
+  ))
+
+
+```
+
+TO DO make binomial model with same predictors 
+Should I use means parameterization in the model? Is roadkill categorical data?
+```{r glm model}
+#poisson family
+m1_D2_squirrel <-glm(count ~ MedianType + condition,
+                     data = point_median_sq2,
+                     family = poisson(link = "log"))
+summary(m1_D2_squirrel)
+
+m1_deer <- glm(count ~ 1,
+               data = deer_median_2,
+               family = poisson(link="log"))
+
+m2_D2_deer <-glm(count ~ MedianType + condition,
+                     data = deer_median_2,
+                     family = poisson(link = "log"))
+lrtest(m1_deer, m2_D2_deer) #m2 is better than the null
+
+#binomial family
+m2_D2_squirrel <-glm(count ~ MedianType + condition,  #i think make condition binomial and use that as response ?
+                     data = point_median_sq2,
+                     family = binomial(link = "logit"))
+summary(m2_D2_squirrel)
+
+```
+
+
+explain what this is doing, is the model good or bad for the data? (bad)
+```{r test model against simulated points}
+#with model 1 squirrel (Poisson)
+simulation_output_1 <- simulateResiduals(fittedModel = m1_D2_squirrel)
+plot(simulation_output_1)
+testUniformity(simulation_output) #why the sin wave shape? does that indicate something with the data?
+
+#with model 1 deer (poisson)
+simulation_output_2 <- simulateResiduals(fittedModel = m2_D2_deer)
+plot(simulation_output_2)
+testUniformity(simulation_output_2)
+
+#null of deer just to see results
+simulation_output_3 <- simulateResiduals(fittedModel = m1_deer)
+plot(simulation_output_3)
+testUniformity(simulation_output_3)
+
+#with model 2 (binomial)
+simulation_output2 <- simulateResiduals(fittedModel = m2_D2_squirrel)
+plot(simulation_output2)
+testUniformity(simulation_output2)
+
+
+```
+
+
