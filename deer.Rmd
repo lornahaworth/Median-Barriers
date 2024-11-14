@@ -24,6 +24,8 @@ library(bbmle)      # for ICtab()
 library(glmmTMB)    #to run simulation
 library(DHARMa)     #to run simulation
 library(stringr)
+install.packages("MASS")
+library(MASS) #for glm.nb
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -65,7 +67,7 @@ D2_deer <- subset(D2_deer_hits, select = c(animal,
 D2_random$animal<-"random" 
 D2_random$condition <- "none"
 ```
-LORNA START HERE
+
 
 ```{r organize and group data}
 
@@ -88,7 +90,16 @@ median_deer <- median_deer %>%
     TRUE ~ MedianType # Keep other values as they are
   ))
 
-densityplot(median_deer$count)
+#Create binary indicator for structures
+library(stringr)
+df$structure <- 0 # Create structure column and assign it a default value of 0
+df <- df %>%
+  mutate(structure = case_when(
+    str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
+    str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
+    str_detect(MedianType, "cable") ~ 1, # If MedianType contains "cable", change structure to 1
+    TRUE ~ structure # Keep other values as they are
+  ))
 
 histogram(subset(median_deer, count < 500)$count)
 #negative binomial distribution
@@ -96,9 +107,8 @@ histogram(subset(median_deer, count < 500)$count)
 
 ```
 
-TO DO make binomial model with same predictors 
 Should I use means parameterization in the model? Is roadkill categorical data?
-```{r glm model}
+```{r OLD glm model with poisson distribution}
 m1_deer <- glm(count ~ 1,
                data = median_deer,
                family = poisson(link="log"))
@@ -111,10 +121,19 @@ lrtest(m1_deer, m2_D2_deer) #m2 is better than the null
 
 
 ```
+```{r glm model with neg binomial distribution}
+#model with neg binom
+m3_D2_deer <- glm.nb(count ~ MedianType + condition,
+                     data = median_deer)
 
+#null
+m4_D2_deer <- glm.nb(count ~ 1,
+                     data = median_deer)
 
-explain what this is doing, is the model good or bad for the data? (bad)
-```{r test model against simulated points}
+lrtest(m4_D2_deer, m3_D2_deer)
+```
+
+```{r OLD poisson simulated points}
 
 #with model 1 deer (poisson)
 simulation_output_2 <- simulateResiduals(fittedModel = m2_D2_deer)
@@ -122,15 +141,26 @@ plot(simulation_output_2)
 testUniformity(simulation_output_2) #why the sin wave shape? does that indicate something with the data?
 
 #null of deer just to see results
-simulation_output_3 <- simulateResiduals(fittedModel = m1_deer)
+simulation_output_0 <- simulateResiduals(fittedModel = m1_deer)
+plot(simulation_output_0)
+testUniformity(simulation_output_0)
+```
+
+
+want to see a straight line of triangles along red line with the least amount of predictors in the model. if the triangles are horizontal the model is over estimating the response, if the triangles are vertical the model is under estimating the response.  
+```{r test model against simulated points}
+
+#neg binom model
+simulation_output_3 <- simulateResiduals(fittedModel = m3_D2_deer)
 plot(simulation_output_3)
 testUniformity(simulation_output_3)
 
-#with model 2 (binomial)
-simulation_output2 <- simulateResiduals(fittedModel = m2_D2_squirrel)
-plot(simulation_output2)
-testUniformity(simulation_output2)
+#neg binom null
+simulation_output_4 <- simulateResiduals(fittedModel = m4_D2_deer)
+plot(simulation_output_4)
+testUniformity(simulation_output_4)
 
+#model 3 is better than the null, that's good
 
 ```
 
