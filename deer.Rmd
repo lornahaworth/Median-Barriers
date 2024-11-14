@@ -92,8 +92,8 @@ median_deer <- median_deer %>%
 
 #Create binary indicator for structures
 library(stringr)
-df$structure <- 0 # Create structure column and assign it a default value of 0
-df <- df %>%
+median_deer$structure <- 0 # Create structure column and assign it a default value of 0
+median_deer <- median_deer %>%
   mutate(structure = case_when(
     str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
     str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
