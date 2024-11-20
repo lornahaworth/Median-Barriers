@@ -11,8 +11,9 @@ BRAINSTORMING NOTES
 
 deer first, then animals in order of size (large-small)
 maybe mtn lion next
-sin wave on residual chart ?? why that shape
 
+
+TO DO box plot of median type and road kill (dead/injured)
 ```{r load libraries} 
 knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
 getwd()
@@ -25,62 +26,85 @@ library(glmmTMB)    #to run simulation
 library(DHARMa)     #to run simulation
 library(stringr)
 install.packages("MASS")
-library(MASS) #for glm.nb
+library(MASS)       #for glm.nb
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 conflict_prefer("summarize", "dplyr")
+conflict_prefer("case_where", "dplyr")
 
 ```
-
+Read in CSV files that have data we collected, HPMS, and NCLD distance to data.
 ```{r read in data}
 
 #District 2 random points
-D2_random_sites <- read.csv("d2_random_sites_HPMS.csv")
+D2_random_sites <- read.csv("d2_random_sites_HPMS_updatedLEH.csv")
+
+#subset, select random rows into new data frame
 
 #District 2 mule deer
-D2_deer_hits <- read.csv("d2_deer_hits_HPMS.csv")
+D2_deer_hits <- read.csv("d2_deer_hits_HPMS_updatedLEH.csv")
 
 ```
+Make the data frames look better by only using necessary data. Including median data we collected, HPMS data, and NCLD distance to data.
 
-
-Make the data frames look better by only using necessary data
+Add date information - can't add date information for roadkill data frame bc then can't join together
 ```{r make new data frames with simplified information from csv }
-
 D2_random <- subset(D2_random_sites, select=c(#cid,
                                                MedianType,
                                                LANE_WIDTH,
                                                MEDIAN_TYP,
-                                               MEDIAN_WID))
+                                               MEDIAN_WID,
+                                               bldg_dist,
+                                               nhd_dist,
+                                               ow_dist,
+                                               dev_dist,
+                                               dev_int_dist,
+                                               barren_dist,
+                                               forest_dist,
+                                               shrub_dist,
+                                               grassland_dist,
+                                              cultivated_dist,
+                                              wetland_dist,
+                                               wet_dist))
                                               # SecondaryAttribute, 
                                               # MedianWidth, 
                                               # RoadsideBarrier))
+#add columns to random points dataframe for to distinguish random and animal condition
+D2_random$animal<-"random" 
+D2_random$condition <- "none"
+D2_random$hit <- 0
 
 D2_deer <- subset(D2_deer_hits, select = c(animal, 
                                            condition, 
                                            MedianType,
                                            LANE_WIDTH,
                                            MEDIAN_TYP,
-                                           MEDIAN_WID))
+                                           MEDIAN_WID,
+                                           bldg_dist,
+                                           nhd_dist,
+                                           ow_dist,
+                                           dev_dist,
+                                           dev_int_dist,
+                                           barren_dist,
+                                           forest_dist,
+                                           shrub_dist,
+                                           grassland_dist,
+                                           cultivated_dist,
+                                           wetland_dist,
+                                           wet_dist))
 
-#add columns to random points dataframe for to distinguish random and animal condition
-D2_random$animal<-"random" 
-D2_random$condition <- "none"
 ```
 
 
 ```{r organize and group data}
 
 #make combined data frame 
+median_ug <- rbind(D2_deer, D2_random) 
 
-median_ug <- rbind(D2_random, D2_deer) #use in binomial model
-
-median_deer <- median_ug %>%  #use in poisson
-  group_by(MedianType, condition) %>%
-  summarize(count=n(), .groups = "drop")
 
 #keep only one median type in structure column, new data frame with single classes
-median_deer <- median_deer %>%
+median_deer <- median_ug %>%
   as.data.frame() %>%
   mutate(MedianType = case_when(
     str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
@@ -91,9 +115,8 @@ median_deer <- median_deer %>%
   ))
 
 #Create binary indicator for structures
-library(stringr)
 median_deer$structure <- 0 # Create structure column and assign it a default value of 0
-median_deer <- median_deer %>%
+median_deer2 <- median_deer %>%
   mutate(structure = case_when(
     str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
     str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
@@ -101,49 +124,33 @@ median_deer <- median_deer %>%
     TRUE ~ structure # Keep other values as they are
   ))
 
-histogram(subset(median_deer, count < 500)$count)
-#negative binomial distribution
+#Create binary indicator for WVC
+median_deer2$hit <- 0 # Create hit column and assign it a default value of 0
+median_deer3 <- median_deer2 %>%
+  mutate(hit = case_when(
+    str_detect(condition, "Dead") ~ 1,
+    str_detect(condition, "Injured") ~ 1,
+    TRUE ~ hit))
 
+median_deer3 <- median_deer2 %>%  
+  group_by(MedianType, condition) %>%
+  summarize(count=n(), .groups = "drop")
 
-```
-
-Should I use means parameterization in the model? Is roadkill categorical data?
-```{r OLD glm model with poisson distribution}
-m1_deer <- glm(count ~ 1,
-               data = median_deer,
-               family = poisson(link="log"))
-
-m2_D2_deer <-glm(count ~ MedianType + condition,
-                     data = median_deer,
-                     family = poisson(link = "log"))
-lrtest(m1_deer, m2_D2_deer) #m2 is better than the null
-
-
+hist(subset(median_deer3, count < 500)$count) #negative binomial distribution
 
 ```
+
+
 ```{r glm model with neg binomial distribution}
 #model with neg binom
-m3_D2_deer <- glm.nb(count ~ MedianType + condition,
-                     data = median_deer)
+m1 <- glm.nb(hit ~ MedianType,
+                     data = median_deer2)
 
 #null
-m4_D2_deer <- glm.nb(count ~ 1,
-                     data = median_deer)
+m0 <- glm.nb(hit ~ 1,
+                     data = median_deer2)
 
-lrtest(m4_D2_deer, m3_D2_deer)
-```
-
-```{r OLD poisson simulated points}
-
-#with model 1 deer (poisson)
-simulation_output_2 <- simulateResiduals(fittedModel = m2_D2_deer)
-plot(simulation_output_2)
-testUniformity(simulation_output_2) #why the sin wave shape? does that indicate something with the data?
-
-#null of deer just to see results
-simulation_output_0 <- simulateResiduals(fittedModel = m1_deer)
-plot(simulation_output_0)
-testUniformity(simulation_output_0)
+lrtest(m0, m1)
 ```
 
 
@@ -162,6 +169,9 @@ testUniformity(simulation_output_4)
 
 #model 3 is better than the null, that's good
 
+anova(m4_D2_deer, m3_D2_deer)
+#theta - dispersion, small number not a good fit
+# 2x log likelihood tests goodness of fit
 ```
 
 
