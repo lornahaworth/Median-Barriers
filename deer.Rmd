@@ -27,6 +27,8 @@ library(DHARMa)     #to run simulation
 library(stringr)
 install.packages("MASS")
 library(MASS)       #for glm.nb
+library(emmeans)
+library(multcomp)
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -132,42 +134,77 @@ median_deer3 <- median_deer2 %>%
     str_detect(condition, "Injured") ~ 1,
     TRUE ~ hit))
 
-median_deer3 <- median_deer2 %>%  
-  group_by(MedianType, condition) %>%
-  summarize(count=n(), .groups = "drop")
+#median_deer4 <- median_deer2 %>%  
+#  group_by(MedianType, condition) %>%
+ # summarize(count=n(), .groups = "drop")
 
-hist(subset(median_deer3, count < 500)$count) #negative binomial distribution
+boxplot(as.factor(median_deer4$MedianType), median_deer4$count)
+
+ggplot(median_deer4, aes(x=MedianType, y=log(count))) +
+  geom_boxplot()
+
+hist(subset(median_deer3, hit < 500)$hit) 
 
 ```
 
 
-```{r glm model with neg binomial distribution}
+```{r glm model with  binomial distribution}
 #model with neg binom
-m1 <- glm.nb(hit ~ MedianType,
-                     data = median_deer2)
+m1 <- glm(hit ~ -1 + as.factor(MedianType),
+                     data = median_deer3,
+                      family = binomial(link="logit"))
 
 #null
-m0 <- glm.nb(hit ~ 1,
-                     data = median_deer2)
+m0 <- glm(hit ~ 1,
+          data = median_deer3,
+          family=binomial(link="logit"))
 
-lrtest(m0, m1)
+
+
+m2 <- glm(hit ~ MedianType + nhd_dist + bldg_dist ,
+                     data = median_deer3,
+                      family = binomial(link="logit"))
+
+lrtest(m1, m2)
+Anova(m2)
+
+lrtest(m1, m0)
+plogis(coef(m1))
+
+# looking for best way to see which median types are better/worse
+emmeans(m1, ~ MedianType, type = "response") #pairwise comparison of each median type to see which one has strongest effect
+contrast(emmeans(m1, ~ MedianType, type = "response", method = "pairwise"))
+
+ggplot(median_deer3, aes(MedianType, exp(predict(m1)))) + geom_point()
+
+# trying tukey test
+summary(glht(m1, mcp(MedianType = "Tukey")))
+```
+```{r mixing it up}
+m3 <- glm(hit ~ MedianType + nhd_dist + bldg_dist,
+                     data = median_deer3,
+                      family = binomial(link="logit"))
+
+coef(m3)
 ```
 
 
 want to see a straight line of triangles along red line with the least amount of predictors in the model. if the triangles are horizontal the model is over estimating the response, if the triangles are vertical the model is under estimating the response.  
 ```{r test model against simulated points}
 
-#neg binom model
-simulation_output_3 <- simulateResiduals(fittedModel = m3_D2_deer)
+#binom model
+simulation_output_1 <- simulateResiduals(fittedModel = m1)
+plot(simulation_output_1)
+testUniformity(simulation_output_1)
+
+#null
+simulation_output_2 <- simulateResiduals(fittedModel = m0)
+plot(simulation_output_2)
+testUniformity(simulation_output_2)
+
+simulation_output_3 <- simulateResiduals(fittedModel = m2)
 plot(simulation_output_3)
 testUniformity(simulation_output_3)
-
-#neg binom null
-simulation_output_4 <- simulateResiduals(fittedModel = m4_D2_deer)
-plot(simulation_output_4)
-testUniformity(simulation_output_4)
-
-#model 3 is better than the null, that's good
 
 anova(m4_D2_deer, m3_D2_deer)
 #theta - dispersion, small number not a good fit
