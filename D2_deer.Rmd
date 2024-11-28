@@ -1,0 +1,182 @@
+---
+title: "District 2 mule deer model"
+author: Lorna Haworth
+output: word_document
+---
+
+```{r load libraries} 
+knitr::opts_knit$set(root.dir = "C:/R_studio/Research/Median-Barriers")
+getwd()
+
+library(tidyverse)
+library(conflicted)
+library(lmtest)     # for lrtest()
+library(bbmle)      # for ICtab()
+library(MASS)   #for Anova
+library(stringr)  #for data structuring 
+library(emmeans)  #for predictor comparisons
+library(multcomp) #for predictor comparisons
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("summarize", "dplyr")
+conflict_prefer("case_where", "dplyr")
+
+```
+
+Read in CSV files that have data we collected, HPMS, and NCLD distance to data.
+```{r read in data}
+
+#District 2 random points
+D2_random_sites <- read.csv("d2_random_sites_HPMS_updatedLEH.csv")
+
+#subset, select random rows into new data frame
+
+#District 2 mule deer
+D2_deer_hits <- read.csv("d2_deer_hits_HPMS_updatedLEH.csv")
+
+
+
+```
+Make the data frames look better by only using necessary data. Including median data we collected, HPMS data, and NCLD distance to data.
+
+Add date information - can't add date information for roadkill data frame bc then can't join together
+```{r make new data frames with simplified information from csv }
+D2_random <- subset(D2_random_sites, select=c(#cid,
+                                               MedianType,
+                                               LANE_WIDTH,
+                                               MEDIAN_TYP,
+                                               MEDIAN_WID,
+                                               bldg_dist,
+                                               nhd_dist,
+                                               ow_dist,
+                                               dev_dist,
+                                               dev_int_dist,
+                                               barren_dist,
+                                               forest_dist,
+                                               shrub_dist,
+                                               grassland_dist,
+                                              cultivated_dist,
+                                              wetland_dist,
+                                               wet_dist))
+                                              
+#add columns to random points dataframe to distinguish random and animal condition
+D2_random$animal<-"random" 
+D2_random$condition <- "none"
+
+D2_deer <- subset(D2_deer_hits, select = c(animal, 
+                                           condition, 
+                                           MedianType,
+                                           LANE_WIDTH,
+                                           MEDIAN_TYP,
+                                           MEDIAN_WID,
+                                           bldg_dist,
+                                           nhd_dist,
+                                           ow_dist,
+                                           dev_dist,
+                                           dev_int_dist,
+                                           barren_dist,
+                                           forest_dist,
+                                           shrub_dist,
+                                           grassland_dist,
+                                           cultivated_dist,
+                                           wetland_dist,
+                                           wet_dist))
+
+```
+
+
+```{r organize data into one data frame}
+
+#make combined data frame 
+median_ug <- rbind(D2_deer, D2_random) 
+
+
+#keep only one median type in structure column, new data frame with single classes
+median_deer <- median_ug %>%
+  as.data.frame() %>%
+  mutate(MedianType = case_when(
+    str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
+    str_detect(MedianType, "concrete") ~ "concrete",
+    str_detect(MedianType, "cable") ~ "cable",
+    str_detect(MedianType, "gravel") & str_detect(MedianType, "vegetative") ~ "vegetative", # If both "gravel" and "vegetative" are present, change to "vegetative"
+    TRUE ~ MedianType # Keep other values as they are
+  ))
+
+#Create binary indicator for structures
+median_deer$structure <- 0 # Create structure column and assign it a default value of 0
+median_deer2 <- median_deer %>%
+  mutate(structure = case_when(
+    str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
+    str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
+    str_detect(MedianType, "cable") ~ 1, # If MedianType contains "cable", change structure to 1
+    TRUE ~ structure # Keep other values as they are
+  ))
+
+#Create binary indicator for WVC
+median_deer2$hit <- 0 # Create hit column and assign it a default value of 0
+median_deer3 <- median_deer2 %>%
+  mutate(hit = case_when(
+    str_detect(condition, "Dead") ~ 1, #condition "dead" and "injuered", change to 1
+    str_detect(condition, "Injured") ~ 1,
+    TRUE ~ hit))
+
+
+```
+
+
+```{r simple glm model with  binomial distribution}
+#model with binomial distribution and means parameterization since "MedianType" is categorical data
+m1 <- glm(hit ~ -1 + as.factor(MedianType),
+                     data = median_deer3,
+                      family = binomial(link="logit"))
+plogis(coef(m1)) #coefficients for each median barrier type, thrie beam is largest effect 
+
+#null model just to see
+m0 <- glm(hit ~ 1,
+          data = median_deer3,
+          family=binomial(link="logit"))
+
+lrtest(m0, m1) #compare first two models, m1 is better yay
+
+#adding some predictors to play around...
+m2 <- glm(hit ~ -1 + MedianType + nhd_dist + bldg_dist ,
+                     data = median_deer3,
+                      family = binomial(link="logit"))
+lrtest(m1, m2)
+Anova(m2) #check p-values to see which predictors affect the model significantly
+
+#adding structure and all NCLD distance to model
+m3 <- glm(hit ~ 0 + MedianType + structure +bldg_dist + nhd_dist + ow_dist + dev_dist + dev_int_dist + barren_dist + forest_dist + shrub_dist + grassland_dist + cultivated_dist + wetland_dist + wet_dist,
+                     data = median_deer3,
+                      family = binomial(link="logit"))
+plogis(coef(m3))
+Anova(m3)
+lrtest(m2, m3)
+```
+
+
+```{r analysis of models}
+
+#analysis of model 1 with just median type
+#looking for best way to see which median types are better/worse
+#pairwise comparison of each median type to see which one has strongest effect
+results_m1 <- emmeans(m1, pairwise ~ MedianType, type = "response", adjust = "tukey") 
+
+results_m1$emmeans
+results_m1$contrasts
+
+#contrast(emmeans(m1, ~ MedianType, type = "response", method = "pairwise"))
+#ggplot(median_deer3, aes(MedianType, exp(predict(m1)))) + geom_point()
+
+#TO DO: NEED TO RESTRUCTURE NCLD DATA SO NO OVERLAPPING, INPUT MOST SIG INTO BELOW RESULTS
+#analysis of model 2 with significant predictors
+results_m3 <- emmeans(m3, pairwise ~ MedianType, type ="response", adjust = "tukey")
+
+```
+
+
+random effects brainstorm: username from roadkill data
+```{r mixing it up}
+###GLMM goes here
+```
