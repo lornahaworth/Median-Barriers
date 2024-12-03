@@ -13,6 +13,7 @@ library(tidyverse)
 library(conflicted)
 library(lmtest)     # for lrtest()
 library(bbmle)      # for ICtab()
+library(MASS)
 library(stringr)
 library(emmeans)
 library(multcomp)
@@ -87,7 +88,7 @@ squir_rand <- rbind(D2_squirrel, D2_random)
 
 
 #keep only one median type in structure column, new data frame with single classes
-median_deer <- median_ug %>%
+median_squirrel <- squir_rand %>%
   as.data.frame() %>%
   mutate(MedianType = case_when(
     str_detect(MedianType, "thrie beam") ~ "thrie beam", # If "thrie beam" is anywhere in the string, change to "thrie beam"
@@ -98,8 +99,8 @@ median_deer <- median_ug %>%
   ))
 
 #Create binary indicator for structures
-median_deer$structure <- 0 # Create structure column and assign it a default value of 0
-median_deer2 <- median_deer %>%
+median_squirrel$structure <- 0 # Create structure column and assign it a default value of 0
+median_squirrel2 <- median_squirrel %>%
   mutate(structure = case_when(
     str_detect(MedianType, "thrie beam") ~ 1, # If MedianType contains "thrie beam", change structure to 1
     str_detect(MedianType, "concrete") ~ 1, # If MedianType contains "concrete", change structure to 1
@@ -108,14 +109,12 @@ median_deer2 <- median_deer %>%
   ))
 
 #Create binary indicator for WVC
-median_deer2$hit <- 0 # Create hit column and assign it a default value of 0
-median_deer3 <- median_deer2 %>%
+median_squirrel2$hit <- 0 # Create hit column and assign it a default value of 0
+median_squirrel3 <- median_squirrel2 %>%
   mutate(hit = case_when(
     str_detect(condition, "Dead") ~ 1,
     str_detect(condition, "Injured") ~ 1,
     TRUE ~ hit))
-
-
 
 ```
 
@@ -123,25 +122,25 @@ median_deer3 <- median_deer2 %>%
 ```{r glm model with  binomial distribution}
 #model with neg binom
 m1 <- glm(hit ~ -1 + as.factor(MedianType),
-                     data = median_deer3,
+                     data = median_squirrel3,
                       family = binomial(link="logit"))
 plogis(coef(m1))
 
 #null
 m0 <- glm(hit ~ 1,
-          data = median_deer3,
+          data = median_squirrel3,
           family=binomial(link="logit"))
 
 #adding some predictors...
 m2 <- glm(hit ~ MedianType + nhd_dist + bldg_dist ,
-                     data = median_deer3,
+                     data = median_squirrel3,
                       family = binomial(link="logit"))
 lrtest(m1, m2)
 Anova(m2)
 
 #all NCLD distance to calcs
 m3 <- glm(hit ~ 0 + MedianType + bldg_dist + nhd_dist + ow_dist + dev_dist + dev_int_dist + barren_dist + forest_dist + shrub_dist + grassland_dist + cultivated_dist + wetland_dist + wet_dist,
-                     data = median_deer3,
+                     data = median_squirrel3,
                       family = binomial(link="logit"))
 coef(m3)
 Anova(m3)
